@@ -1,91 +1,247 @@
-## Algorithm 1: Neighbors only, with some randomization for chance, to convert a dirt entity to a grass entity.
+## Algorithm 1: Cardinally-adjacent neighbors. If at least on neighbor is grass, a dirt tile converts to grass.
 
-## Take a grid of entities, and randomly choose a starting entity.
-## For each tick, determine the chances of any entities with a potential for conversion.
-## For each entity with potential, if the calculated chance to convert exceeds some threshold, convert to a grass entity.
-## Update the grid of entities.
+## Set these to define the size of the Field instance.
+FIELD_ROWS = 50
+FIELD_COLUMNS = 80
 
-class Entity:
-    def onTick(this, neighbors):
-        return NotImplemented
+## Set this to define the initial count of grass seedings.
+SEED_COUNT = 3
 
-class DirtEntity(Entity):
-    def onTick(this, neighbors):
-        ## TODO: Examine neighbors to see if any of them are grass entities.
-        ## If no neighboring entities are grass types, then there is no chance to convert to grass.
-        ## Otherwise, do some kind of math to get to a value to determine if this entity will convert.
+import pygame
+import random
+
+class TileChangedListener:
+    def onTileChanged(this, grewGrass):
         pass
 
-class GrassEntity:
-    def onTick(this, neighbors):
-        ## This entity is already a grass entity, so there is nothing to do.
+class Tile:
+    def __init__(this):
+        this.grewGrass = False
+        this.tileChangedListener = None
+
+    def setTileChangedListener(this, listener):
+        this.tileChangedListener = listener
+
+    def hasGrownGrass(this):
+        return this.grewGrass
+
+    def growGrass(this):
+        if not this.grewGrass:
+            this.grewGrass = True
+
+            if not this.tileChangedListener is None:
+                this.tileChangedListener.onTileChanged(True)
+
+class TileViewChangedListener:
+    def onTileViewChanged(this, row, column):
         pass
 
-class Field:
-    def __init__(this, length, height):
-        this.__entities = list()
-        this.__dimensions = (length, height)
+class TileView(TileChangedListener):
+    LENGTH = 16
+    HEIGHT = 16
 
-        for l in range(length):
-            for h in range(height):
-                this.__entities.append(DirtEntity())
+    DIRT_COLOR = (63, 63, 0, 255)
+    GRASS_COLOR = (0, 255, 0, 255)
 
-    def __getEntityIndex(this, x, y):
-        entityIndex = -1
+    def __init__(this, tile, row, column):
+        if not isinstance(tile, Tile):
+            raise ValueError("A tile is required.")
 
-        length, height = this.__dimensions
+        this.rendering = pygame.Surface((TileView.LENGTH, TileView.HEIGHT), pygame.SRCALPHA, 32)
+        this.rendering.fill(TileView.DIRT_COLOR)
 
-        if 0 <= x < length and 0 <= y < height:
-            entityIndex = y * length + x
+        tile.setTileChangedListener(this)
 
-        return entityIndex
+        this.tileViewChangedListener = None
+        this.row = row
+        this.column = column
 
-    def getEntity(this, x, y):
-        entity = None
+    def setTileViewChangedListener(this, listener):
+        this.tileViewChangedListener = listener
 
-        entityIndex = this.__getEntityIndex(x, y)
+    def onTileChanged(this, grewGrass):
+        this.rendering.fill(TileView.GRASS_COLOR)
 
-        if 0 <= entityIndex:
-            entity = this.__entities[entityIndex]
+        if not this.tileViewChangedListener is None:
+            this.tileViewChangedListener.onTileViewChanged(this.row, this.column)
 
-        return entity
+    def render(this):
+        return this.rendering
 
-    def getEntityNeighbors(this, x, y):
-        n = this.getEntity(x, y - 1)
-        e = this.getEntity(x + 1, y)
-        s = this.getEntity(x, y + 1)
-        w = this.getEntity(x - 1, y)
+class TileMap:
+    def __init__(this, rows, columns):
+        this.tiles = list()
+        this.rows = rows
+        this.columns = columns
 
-        neighbors = list()
+        for tileIndex in range(rows * columns): this.tiles.append(Tile())
 
-        if not n is None:
-            neighbors.append(n)
+    def getRowCount(this):
+        return this.rows
 
-        if not e is None:
-            neighbors.append(e)
+    def getColumnCount(this):
+        return this.columns
 
-        if not s is None:
-            neighbors.append(s)
+    def getTile(this, row, column):
+        tileIndex = (row * this.columns + column) if 0 <= row < this.rows and 0 <= column < this.columns else -1
 
-        if not w is None:
-            neighbors.append(w)
+        return this.tiles[tileIndex] if 0 <= tileIndex else None
 
-        return neighbors
+    def onTick(this):
+        ## Pick a random tile.
+        row = random.randint(0, this.rows - 1)
+        column = random.randint(0, this.columns - 1)
+
+        tile = this.getTile(row, column)
+
+        if not tile is None:
+            ## If the tile hasn't grown grass... give it a chance.
+            if not tile.hasGrownGrass():
+                ## For this algorithm, only the adjacent neighbors are included (N, E, S, W).
+
+                ## Inspect neighbors.
+                neighbors = list()
+
+                neighbors.append(this.getTile(row - 1, column))
+                neighbors.append(this.getTile(row, column + 1))
+                neighbors.append(this.getTile(row + 1, column))
+                neighbors.append(this.getTile(row, column - 1))
+
+                contribution = 0
+
+                for neighbor in neighbors:
+                    ## Each neighbor gives a 25% chance for the current tile to grow grass.
+                    contribution += 0.25 if isinstance(neighbor, Tile) and neighbor.hasGrownGrass() else 0.00
+
+##                print "Contribution of neighbors for (" + str(row) + ", " + str(column) + "):", contribution
+
+                if 0 < contribution:
+                    tile.growGrass()
+
+class TileMapView(TileViewChangedListener):
+    BACKGROUND_COLOR = (0, 0, 0, 0)
+
+    def __init__(this, tileMap):
+        if not isinstance(tileMap, TileMap):
+            raise ValueError("A tile map is required.")
+
+        this.tileViews = list()
+        this.rows = tileMap.getRowCount()
+        this.columns = tileMap.getColumnCount()
+
+        for row in range(this.rows):
+            for column in range(this.columns):
+                tileView = TileView(tileMap.getTile(row, column), row, column)
+                tileView.setTileViewChangedListener(this)
+                this.tileViews.append(tileView)
+
+        this.rendering = pygame.Surface((this.columns * TileView.LENGTH, this.rows * TileView.HEIGHT), pygame.SRCALPHA, 32)
+        this.rendering.fill(TileMapView.BACKGROUND_COLOR)
+
+    def onTileViewChanged(this, row, column):
+        tileView = this.tileViews[row * this.columns + column]
+        this.rendering.blit(tileView.render(), (column * TileView.LENGTH, row * TileView.HEIGHT))
+
+    def render(this):
+        return this.rendering
+
+class PyGameEventApp:
+    def __init__(this, debugMessages=False):
+        this._debugging = debugMessages
+        this.running = False
+
+    def onKeyDown(this, key):
+        if this._debugging: print str.format("KeyDown: {0}", key)
+
+    def onKeyUp(this, key):
+        if this._debugging: print str.format("KeyUp: {0}", key)
+
+    def onQuit(this):
+        this.running = False
+        if this._debugging: print "Quitting..."
+
+    def onUpdate(this):
+        if this._debugging: print "Updating..."
+
+    def run(this):
+        this.running = True
+        while this.running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    this.onQuit()
+                elif event.type == pygame.KEYDOWN:
+                    this.onKeyDown(event.key)
+                elif event.type == pygame.KEYUP:
+                    this.onKeyUp(event.key)
+            if this.running:
+                this.onUpdate()
+
+class Field(PyGameEventApp):
+    def __init__(this, rows=50, columns=80, caption="Field o' Grass"):
+        PyGameEventApp.__init__(this)
+        pygame.display.init()
+
+        this.length = columns * TileView.LENGTH
+        this.height = rows * TileView.HEIGHT
+
+        this._screen = pygame.display.set_mode((this.length, this.height), pygame.DOUBLEBUF, 32)
+        pygame.display.set_caption(caption)
+        pygame.mouse.set_visible(0)
+
+        ## Added from one.py
+        this.tileMap = TileMap(rows, columns)
+        this.tileMapView = TileMapView(this.tileMap)
+
+    def onKeyDown(this, key):
+        if key == pygame.K_ESCAPE:
+            this.running = False
+
+    def onUpdate(this):
+        ## Update the tile map.
+        this.tileMap.onTick()
+
+        ## Draw the tile map to the screen.
+        this._screen.blit(this.tileMapView.render(), (0, 0))
+        pygame.display.flip()
+
+    def close(this):
+        pygame.display.quit()
+
+    def getLength(this):
+        return this.length
+
+    def getHeight(this):
+        return this.height
+
+    def getRowCount(this):
+        return this.tileMap.getRowCount()
+
+    def getColumnCount(this):
+        return this.tileMap.getColumnCount()
+
+    def seed(this, row, column):
+        tile = this.tileMap.getTile(row, column)
+
+        if not tile is None:
+            tile.growGrass()
+
+def seedRandomGrass(field):
+    row = random.randint(0, field.getRowCount() - 1)
+    column = random.randint(0, field.getColumnCount() - 1)
+
+    print "Seeding grass at (" + str(row) + "," + str(column) + ")."
+
+    field.seed(row, column)
 
 def main():
-    field = Field(3, 3) ## Start with a simple 3x3 field.
-    print "Length of neighbors of (0, 0):", len(field.getEntityNeighbors(0, 0))
-    print "Length of neighbors of (1, 0):", len(field.getEntityNeighbors(1, 0))
-    print "Length of neighbors of (2, 0):", len(field.getEntityNeighbors(2, 0))
+    ## Take a grid of entities, and randomly choose a starting entity.
+    field = Field(FIELD_ROWS, FIELD_COLUMNS)
 
-    print "Length of neighbors of (0, 1):", len(field.getEntityNeighbors(0, 1))
-    print "Length of neighbors of (1, 1):", len(field.getEntityNeighbors(1, 1))
-    print "Length of neighbors of (2, 1):", len(field.getEntityNeighbors(2, 1))
+    for seedling in range(SEED_COUNT):
+        seedRandomGrass(field)
 
-    print "Length of neighbors of (0, 2):", len(field.getEntityNeighbors(0, 2))
-    print "Length of neighbors of (1, 2):", len(field.getEntityNeighbors(1, 2))
-    print "Length of neighbors of (2, 2):", len(field.getEntityNeighbors(2, 2))
+    field.run()
+    field.close()
 
 if __name__ == "__main__":
     main()
-
