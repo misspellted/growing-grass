@@ -7,54 +7,51 @@ import pygame
 import random
 import zero
 
-class TileMapOne(zero.TileMap):
-    def __init__(this, rows=zero.FIELD_ROWS, columns=zero.FIELD_COLUMNS):
-        zero.TileMap.__init__(this, rows, columns)
+class One(zero.Algorithm):
+    def __init__(this, tileMap):
+        zero.Algorithm.__init__(this, tileMap)
+
+    def seed(this, seedlings):
+        for seeding in range(seedlings):
+            ## Pick a random tile.
+            row, column = this.getRandomTileCoordinates()
+
+            print "Growing grass at (" + str(row) + "," + str(column) + ")."
+
+            this.growGrass(row, column)
+
+    def getRandomTileCoordinates(this):
+        return (random.randint(0, this.rows - 1), random.randint(0, this.columns - 1))
+
+    def hasGrassNeighbors(this, row, column):
+        ## Inspect neighbors.
+        neighbors = list()
+
+        neighbors.append(this.isGrassTile(row - 1, column))
+        neighbors.append(this.isGrassTile(row, column + 1))
+        neighbors.append(this.isGrassTile(row + 1, column))
+        neighbors.append(this.isGrassTile(row, column - 1))
+
+        return (True in neighbors)
 
     def onTick(this):
+        ## For this algorithm, only the cardinally-adjacent (N, E, S, W) neighbors of a random tile are inspected
+        ## to determine if the current tile can grow grass.
+
         ## Pick a random tile.
-        row = random.randint(0, this.rows - 1)
-        column = random.randint(0, this.columns - 1)
+        row, column = this.getRandomTileCoordinates()
 
-        tile = this.getTile(row, column)
-
-        if not tile is None:
-            ## If the tile hasn't grown grass... give it a chance.
-            if not tile.hasGrownGrass():
-                ## For this algorithm, only the adjacent neighbors are included (N, E, S, W).
-
-                ## Inspect neighbors.
-                neighbors = list()
-
-                neighbors.append(this.getTile(row - 1, column))
-                neighbors.append(this.getTile(row, column + 1))
-                neighbors.append(this.getTile(row + 1, column))
-                neighbors.append(this.getTile(row, column - 1))
-
-                contribution = 0
-
-                for neighbor in neighbors:
-                    ## Each neighbor gives a 25% chance for the current tile to grow grass.
-                    contribution += 0.25 if isinstance(neighbor, zero.Tile) and neighbor.hasGrownGrass() else 0.00
-
-##                print "Contribution of neighbors for (" + str(row) + ", " + str(column) + "):", contribution
-
-                if 0 < contribution:
-                    tile.growGrass()
-
-def seedRandomGrass(field):
-    row = random.randint(0, field.getRowCount() - 1)
-    column = random.randint(0, field.getColumnCount() - 1)
-
-    print "Seeding grass at (" + str(row) + "," + str(column) + ")."
-
-    field.seed(row, column)
+        if not this.isGrassTile(row, column):
+            if this.hasGrassNeighbors(row, column):
+                this.growGrass(row, column)
 
 def main():
-    field = zero.Field(TileMapOne())
+    tileMap = zero.TileMap(zero.FIELD_ROWS, zero.FIELD_COLUMNS)
+    algorithm = One(tileMap)
 
-    for seedling in range(SEED_COUNT):
-        seedRandomGrass(field)
+    field = zero.Field(tileMap, algorithm)
+
+    algorithm.seed(SEED_COUNT)
 
     field.run()
     field.close()
