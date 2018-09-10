@@ -187,6 +187,7 @@ class Field(PyGameEventApp):
             raise ValueError("An algorithm is required.")
 
         PyGameEventApp.__init__(this)
+        pygame.display.init()
 
         this.length = tileMap.getColumnCount() * TILE_SIZE
         this.height = tileMap.getRowCount() * TILE_SIZE
