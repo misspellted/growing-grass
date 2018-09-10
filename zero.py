@@ -1,8 +1,9 @@
 ## Algorithm "0": Provide the common visualization components for demonstrating actual algorithms.
 
 ## Set these to define the size of the Field instance.
-FIELD_ROWS = 50
-FIELD_COLUMNS = 80
+TILE_SIZE = 16
+FIELD_ROWS = 25
+FIELD_COLUMNS = 40
 
 import pygame
 import random
@@ -34,9 +35,6 @@ class TileViewChangedListener:
         pass
 
 class TileView(TileChangedListener):
-    LENGTH = 16
-    HEIGHT = 16
-
     DIRT_COLOR = (63, 63, 0, 255)
     GRASS_COLOR = (0, 255, 0, 255)
 
@@ -44,7 +42,7 @@ class TileView(TileChangedListener):
         if not isinstance(tile, Tile):
             raise ValueError("A tile is required.")
 
-        this.rendering = pygame.Surface((TileView.LENGTH, TileView.HEIGHT), pygame.SRCALPHA, 32)
+        this.rendering = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA, 32)
         this.rendering.fill(TileView.DIRT_COLOR)
 
         tile.setTileChangedListener(this)
@@ -105,12 +103,12 @@ class TileMapView(TileViewChangedListener):
                 tileView.setTileViewChangedListener(this)
                 this.tileViews.append(tileView)
 
-        this.rendering = pygame.Surface((this.columns * TileView.LENGTH, this.rows * TileView.HEIGHT), pygame.SRCALPHA, 32)
+        this.rendering = pygame.Surface((this.columns * TILE_SIZE, this.rows * TILE_SIZE), pygame.SRCALPHA, 32)
         this.rendering.fill(TileMapView.BACKGROUND_COLOR)
 
     def onTileViewChanged(this, row, column):
         tileView = this.tileViews[row * this.columns + column]
-        this.rendering.blit(tileView.render(), (column * TileView.LENGTH, row * TileView.HEIGHT))
+        this.rendering.blit(tileView.render(), (column * TILE_SIZE, row * TILE_SIZE))
 
     def render(this):
         return this.rendering
@@ -146,16 +144,53 @@ class PyGameEventApp:
             if this.running:
                 this.onUpdate()
 
+class Algorithm:
+    def __init__(this, tileMap):
+        if not isinstance(tileMap, TileMap):
+            raise ValueError("A tile map instance is required.")
+
+        this._tileMap = tileMap
+
+    @property
+    def rows(this):
+        return this._tileMap.getRowCount()
+
+    @property
+    def columns(this):
+        return this._tileMap.getColumnCount()
+
+    def isGrassTile(this, row, column):
+        grassTile = False
+
+        tile = this._tileMap.getTile(row, column)
+
+        if not tile is None:
+            grassTile = tile.hasGrownGrass()
+
+        return grassTile
+
+    def growGrass(this, row, column):
+        tile = this._tileMap.getTile(row, column)
+
+        if not tile is None:
+            tile.growGrass()
+
+    def onTick(this):
+        return NotImplemented
+
 class Field(PyGameEventApp):
-    def __init__(this, tileMap, caption="Field o' Grass"):
+    def __init__(this, tileMap, algorithm, caption="Field o' Grass"):
         if not isinstance(tileMap, TileMap):
             raise ValueError("A tile map is required.")
+
+        if not isinstance(algorithm, Algorithm):
+            raise ValueError("An algorithm is required.")
 
         PyGameEventApp.__init__(this)
         pygame.display.init()
 
-        this.length = tileMap.getColumnCount() * TileView.LENGTH
-        this.height = tileMap.getRowCount() * TileView.HEIGHT
+        this.length = tileMap.getColumnCount() * TILE_SIZE
+        this.height = tileMap.getRowCount() * TILE_SIZE
 
         this._screen = pygame.display.set_mode((this.length, this.height), pygame.DOUBLEBUF, 32)
         pygame.display.set_caption(caption)
@@ -164,20 +199,19 @@ class Field(PyGameEventApp):
         this.tileMap = tileMap
         this.tileMapView = TileMapView(this.tileMap)
 
+        this.algorithm = algorithm
+
     def onKeyDown(this, key):
         if key == pygame.K_ESCAPE:
             this.running = False
 
     def onUpdate(this):
-        ## Request an update to the tile map (poke the algorithm).
-        this.tileMap.onTick()
+        ## Poke the algorithm.
+        this.algorithm.onTick()
 
         ## Draw the tile map to the screen.
         this._screen.blit(this.tileMapView.render(), (0, 0))
         pygame.display.flip()
-
-    def close(this):
-        pygame.display.quit()
 
     def getLength(this):
         return this.length
@@ -196,3 +230,7 @@ class Field(PyGameEventApp):
 
         if not tile is None:
             tile.growGrass()
+
+    def close(this):
+        pygame.display.quit()
+
