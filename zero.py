@@ -97,14 +97,15 @@ class TileMapView(TileViewChangedListener):
         this.rows = tileMap.getRowCount()
         this.columns = tileMap.getColumnCount()
 
+        this.rendering = pygame.Surface((this.columns * TILE_SIZE, this.rows * TILE_SIZE), pygame.SRCALPHA, 32)
+        this.rendering.fill(TileMapView.BACKGROUND_COLOR)
+
         for row in range(this.rows):
             for column in range(this.columns):
                 tileView = TileView(tileMap.getTile(row, column), row, column)
                 tileView.setTileViewChangedListener(this)
                 this.tileViews.append(tileView)
-
-        this.rendering = pygame.Surface((this.columns * TILE_SIZE, this.rows * TILE_SIZE), pygame.SRCALPHA, 32)
-        this.rendering.fill(TileMapView.BACKGROUND_COLOR)
+                this.rendering.blit(tileView.render(), (column * TILE_SIZE, row * TILE_SIZE))
 
     def onTileViewChanged(this, row, column):
         tileView = this.tileViews[row * this.columns + column]
@@ -158,6 +159,9 @@ class Algorithm:
     @property
     def columns(this):
         return this._tileMap.getColumnCount()
+
+    def seed(this, count):
+        return NotImplemented
 
     def isGrassTile(this, row, column):
         grassTile = False
@@ -233,4 +237,28 @@ class Field(PyGameEventApp):
 
     def close(this):
         pygame.display.quit()
+
+class Zero(Algorithm):
+    def __init__(this, tileMap):
+        Algorithm.__init__(this, tileMap)
+
+    def seed(this, count):
+        pass
+
+    def onTick(this):
+        pass
+
+def main():
+    tileMap = TileMap(FIELD_ROWS, FIELD_COLUMNS)
+    algorithm = Zero(tileMap)
+
+    field = Field(tileMap, algorithm)
+
+    algorithm.seed(1)
+
+    field.run()
+    field.close()
+
+if __name__ == "__main__":
+    main()
 
